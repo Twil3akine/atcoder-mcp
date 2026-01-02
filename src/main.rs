@@ -12,7 +12,7 @@ struct JsonRcpRequest {
 }
 
 /// スクレイピング機能: 指定した問題のHTMLを取得してテキストを抽出
-async fn fetch_problem(contest_id: &str, problem_id: &str) -> Result<String> {
+async fn fetch_problem(contest_id: &str, problem_id: &str) -> anyhow::Result<String> {
     let url = format!(
         "https://atcoder.jp/contests/{}/tasks/{}",
         contest_id, problem_id
@@ -49,7 +49,7 @@ async fn fetch_problem(contest_id: &str, problem_id: &str) -> Result<String> {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     // なんか本来はツールの定義？が必要らしい
     // あと、MCPに基づいた handshake が必要らしい
 
