@@ -63,36 +63,90 @@ async fn main() -> anyhow::Result<()> {
         // JSON-RPCリクエストをパース
         let req: JsonRcpRequest = match serde_json::from_str(&line) {
             Ok(r) => r,
-            Err(_) => continue, // パースエラーは無視
+            Err(e) => {
+                eprintln!("Parse error: {}", e);
+                continue;
+            }
         };
 
-        // ツールの実行レクかチェック
-        if req.method == "tools/call" {
-            if let Some(params) = req.params {
-                if params["name"] == "fetch_problem" {
-                    let args = &params["argument"];
-                    let contest_id = args["contest_id"].as_str().unwrap_or("");
-                    let problem_id = args["problem_id"].as_str().unwrap_or("");
+        // メソッドごとの分岐
+        match req.method.as_str() {
+            // 1. 初期化リクエスト (Zedが最初に送ってくる)
+            "initialize" => {
+                let response = json!({
+                    "jsonrpc": "2.0",
+                    "id": req.id,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {
+                            "tools": {}
+                        },
+                        "serverInfo": {
+                            "name": "atcoder-hint-mcp",
+                            "version": "0.1.0"
+                        }
+                    }
+                });
+                println!("{}", response);
+            }
 
-                    // ロジックの実行
-                    let result_text = fetch_problem(contest_id, problem_id)
-                        .await
-                        .unwrap_or_else(|e| e.to_string());
+            // 2. 初期化完了通知 (返信不要)
+            "notifications/initialized" => {
+                // 何もしなくてOK
+            }
 
-                    // 結果をJSON-RPC形式で返す
-                    let response = json!({
-                        "jsonrpc": "2.0",
-                         "id": req.id,
-                      "result": {
-                          "content": [{
-                           "type": "text",
-                        "text": result_text
-                       }]
-                      }
-                    });
-                    println!("{}", response);
+            // 3. ツール一覧の要求 (Zed「どんな機能があるの？」)
+            "tools/list" => {
+                let response = json!({
+                    "jsonrpc": "2.0",
+                    "id": req.id,
+                    "result": {
+                        "tools": [{
+                            "name": "fetch_problem",
+                            "description": "AtCoderの問題文を取得します。contest_id (例: abc335) と problem_id (例: abc335_a) が必要です。",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "contest_id": { "type": "string" },
+                                    "problem_id": { "type": "string" }
+                                },
+                                "required": ["contest_id", "problem_id"]
+                            }
+                        }]
+                    }
+                });
+                println!("{}", response);
+            }
+
+            // 4. ツールの実行 (Zed「これやって！」)
+            "tools/call" => {
+                if let Some(params) = req.params {
+                    if params["name"] == "fetch_problem" {
+                        let args = &params["arguments"];
+                        let contest_id = args["contest_id"].as_str().unwrap_or("");
+                        let problem_id = args["problem_id"].as_str().unwrap_or("");
+
+                        let result_text = fetch_problem(contest_id, problem_id)
+                            .await
+                            .unwrap_or_else(|e| e.to_string());
+
+                        let response = json!({
+                            "jsonrpc": "2.0",
+                            "id": req.id,
+                            "result": {
+                                "content": [{
+                                    "type": "text",
+                                    "text": result_text
+                                }]
+                            }
+                        });
+                        println!("{}", response);
+                    }
                 }
             }
+
+            // 未知のメソッドは無視
+            _ => {}
         }
     }
 
